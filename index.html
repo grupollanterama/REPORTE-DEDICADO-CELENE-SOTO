@@ -144,6 +144,7 @@
 <div id="zonas"></div>
 <div id="clientes-top"></div>
 <div id="cumplimiento"></div>
+<div id="productos"></div>
 
 <div class="modal-bg" id="modal-bg" onclick="if(event.target===this)cerrarModal()">
   <div class="modal" id="modal"></div>
@@ -164,6 +165,14 @@ const MESES_P = {'ene':1,'enero':1,'feb':2,'febrero':2,'mar':3,'marzo':3,'abr':4
   'oct':10,'octubre':10,'nov':11,'noviembre':11,'dic':12,'diciembre':12};
 const MES_NOM = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const DOW = ['D','L','M','M','J','V','S'];
+const CATEGORIAS = [
+  {key:'acum', label:'Acumuladores', icon:'🔋', color:'#3b82f6', match: c => c.includes('5 ACUMULAD') || c.includes('ACUMULAD')},
+  {key:'lub',  label:'Lubricantes',  icon:'🛢️', color:'#0891b2', match: c => c.includes('7 LUBRICAN') || c.includes('LUBRICAN')},
+  {key:'moto', label:'Motobaterías', icon:'🏍️', color:'#dc2626', match: c => c.includes('8 MOTOBAT') || c.includes('MOTOBAT')},
+  {key:'filt', label:'Filtros',      icon:'🛠️', color:'#16a34a', match: c => c.includes('6 FILTROS') || c.includes('FILTRO')},
+  {key:'llan', label:'Llantas',      icon:'🛞', color:'#f97316', match: c => c.includes('1 AUTO') || c.includes('2 CAMTA') || c.includes('3 CAMION') || c.includes('CHINA AUTO')},
+  {key:'casc', label:'Cascos/Otros', icon:'🪖', color:'#a855f7', match: c => c.includes('9 OTROS')}
+];
 const DOW_L = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const DOW_FULL = ['DOMINGO','LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO']; // 0..6 (no visita en dom)
 const ZONA_COLORS = {'TULA':'#3b82f6','ACTOPAN':'#16a34a','PACHUCA':'#ec4899','SAHAGÚN':'#eab308','TIZAYUCA':'#a855f7','TULANCINGO':'#f97316','SIN IDENTIFICAR':'#64748b','(SIN ZONA)':'#94a3b8'};
@@ -290,6 +299,11 @@ function procesar(tul, auto){
     dc.importe += imp;
     if(fac) dc.facturas.add(fac);
     d.porZona[zona] = (d.porZona[zona]||0) + imp;
+    // Clasificar por categoría de producto
+    const clasif = String(r['Clasificacion']||r['CLASIFICACION']||'').toUpperCase().trim();
+    const cant = n(r['Cantidad']||r['CANTIDAD']);
+    let cat_key = null;
+    for(const cat of CATEGORIAS){ if(cat.match(clasif)){ cat_key = cat.key; break; } }
     // Global
     if(!clientesG[nk]) clientesG[nk] = {nomCanon:nom, codes:new Set(), importe:0, costo:0, dias:new Set(), facturas:new Set(), zona, cat:!!cat, catObj:cat||null};
     const g = clientesG[nk];
@@ -297,6 +311,13 @@ function procesar(tul, auto){
     if(nom && nom.length > (g.nomCanon||'').length) g.nomCanon = nom;
     g.importe += imp; g.costo += cos; g.dias.add(key);
     if(fac) g.facturas.add(fac);
+    // Per-category en el cliente global
+    if(cat_key){
+      if(!g.porCat) g.porCat = {};
+      if(!g.porCat[cat_key]) g.porCat[cat_key] = {importe:0, cantidad:0};
+      g.porCat[cat_key].importe += imp;
+      g.porCat[cat_key].cantidad += cant;
+    }
   });
 
   const dias = Object.keys(porDia).sort().map(k=>({key:k,...porDia[k]}));
@@ -316,6 +337,7 @@ function render(){
   renderZonas();
   renderTopClientes();
   renderCumplimiento();
+  renderProductos();
 }
 
 function renderKPIsGlobales(){
@@ -610,6 +632,65 @@ function renderCumplimiento(){
     </div>`;
 }
 
+function renderProductos(){
+  const cont = document.getElementById('productos');
+  // Totales por categoría + top clientes por categoría
+  const totCat = {}; // key => importe total global
+  CATEGORIAS.forEach(c=>totCat[c.key]=0);
+  const topPorCat = {}; // key => sorted array of {nom, imp, cant, zona, codes}
+  CATEGORIAS.forEach(cat=>{
+    const arr = [];
+    DATA.clientes.forEach(c=>{
+      const v = c.porCat && c.porCat[cat.key];
+      if(v && v.importe>0){
+        arr.push({nom:c.nomCanon, zona:c.zona, codes:c.codes, imp:v.importe, cant:v.cantidad});
+        totCat[cat.key] += v.importe;
+      }
+    });
+    arr.sort((a,b)=>b.imp-a.imp);
+    topPorCat[cat.key] = arr;
+  });
+  const grandTotal = Object.values(totCat).reduce((s,v)=>s+v,0);
+  if(grandTotal===0){ cont.innerHTML=''; return; }
+
+  const cards = CATEGORIAS.map(cat=>{
+    const tot = totCat[cat.key];
+    const pct = grandTotal>0 ? (tot/grandTotal*100) : 0;
+    const top = topPorCat[cat.key].slice(0,8);
+    if(tot===0) return `
+      <div class="card" style="border-top:4px solid ${cat.color};padding:12px;margin-bottom:8px;opacity:.6">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <h3 style="font-size:13px;font-weight:900;color:${cat.color};text-transform:uppercase;letter-spacing:1px">${cat.icon} ${cat.label}</h3>
+          <span class="muted" style="font-size:11px">Sin venta</span>
+        </div>
+      </div>`;
+    const filas = top.map((c,i)=>`
+      <tr>
+        <td style="padding:5px 6px;font-size:11px"><b>${i+1}.</b> ${c.nom}<br><span style="font-size:9px;color:#64748b">${c.zona} · ${[...c.codes].slice(0,2).map(x=>`<span class="chip-lta">${x}</span>`).join(' ')||''}</span></td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;white-space:nowrap"><b style="color:${cat.color}">${fmtM(c.imp)}</b><br><span style="font-size:9px;color:#64748b">${Math.round(c.cant)} u</span></td>
+      </tr>`).join('');
+    return `
+      <div class="card" style="border-top:4px solid ${cat.color};padding:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+          <h3 style="font-size:13px;font-weight:900;color:${cat.color};text-transform:uppercase;letter-spacing:1px">${cat.icon} ${cat.label}</h3>
+          <div style="text-align:right"><div style="font-size:16px;font-weight:900;color:${cat.color}">${fmtM(tot)}</div><div class="muted" style="font-size:9px">${pct.toFixed(1)}% del total · ${topPorCat[cat.key].length} clientes</div></div>
+        </div>
+        <table style="margin-top:4px"><tbody>${filas}</tbody></table>
+        ${topPorCat[cat.key].length>8 ? `<p class="muted" style="font-size:9px;margin-top:6px;text-align:center">Top 8 de ${topPorCat[cat.key].length} · Excel trae todos</p>` : ''}
+      </div>`;
+  }).join('');
+
+  cont.innerHTML = `
+    <div class="card">
+      <h2 style="font-size:14px;margin-bottom:12px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;color:#0c1f44">
+        🛒 Productos: mejores clientes por categoría <span class="muted" style="font-weight:400;text-transform:none;font-size:11px">· todo el periodo</span>
+      </h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px">
+        ${cards}
+      </div>
+    </div>`;
+}
+
 function excel(){
   if(!DATA) return;
   const wb = XLSX.utils.book_new();
@@ -659,6 +740,23 @@ function excel(){
     h5.push([c.nomCanon, c.zona, esporadico && !diasAsig.length ? 'ESPORADICO' : (diasAsig.join(' / ') || '—'), ok, fuera, tot, tot>0?Math.round(ok/tot*100)+'%':'—', c.importe]);
   });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(h5), 'Cumplimiento visita');
+
+  // Hoja por categoría de producto: mejores clientes
+  CATEGORIAS.forEach(cat=>{
+    const rows = [['#','Cliente','Zona','Códigos','Cantidad','Importe']];
+    const arr = [];
+    DATA.clientes.forEach(c=>{
+      const v = c.porCat && c.porCat[cat.key];
+      if(v && v.importe>0) arr.push({nom:c.nomCanon, zona:c.zona, codes:c.codes, imp:v.importe, cant:v.cantidad});
+    });
+    arr.sort((a,b)=>b.imp-a.imp);
+    arr.forEach((c,i)=>rows.push([i+1,c.nom,c.zona,c.codes.join(' / '),c.cant,c.imp]));
+    if(arr.length>0){
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols']=[{wch:5},{wch:40},{wch:14},{wch:22},{wch:10},{wch:14}];
+      XLSX.utils.book_append_sheet(wb, ws, cat.label.slice(0,30));
+    }
+  });
 
   const headers = ['Codigo','Descripcion','Cod Vend 1','Cantidad','Importe','Costo','Cliente','Cod de cliente','Clasificacion','Almacen','Factura','Cod Vend 2','Descuento','Equi','Fecha','1','2','3','4','5','DCTOAPOYO','MONTOAPOYO','_fuente'];
   const h6 = [headers];
