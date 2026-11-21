@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Celene Soto · Reporte diario</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f1f5f9;color:#0c1f44;padding:16px;max-width:1100px;margin:0 auto}
+  header{background:linear-gradient(135deg,#0c1f44,#1e3a8a);color:#fff;padding:20px 24px;border-radius:16px;margin-bottom:16px;border-bottom:4px solid #facc15}
+  header h1{font-size:22px;font-weight:900;letter-spacing:-0.5px}
+  header p{font-size:11px;color:#facc15;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-top:4px}
+  .card{background:#fff;border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  button{background:linear-gradient(135deg,#ec4899,#be185d);color:#fff;border:0;padding:12px 24px;border-radius:10px;font-weight:900;font-size:13px;text-transform:uppercase;letter-spacing:1.5px;cursor:pointer;box-shadow:0 4px 10px rgba(236,72,153,.3)}
+  button:hover{opacity:.92}
+  button.sec{background:#16a34a;box-shadow:0 4px 10px rgba(22,163,74,.25)}
+  button:disabled{background:#94a3b8;cursor:not-allowed}
+  .drop{border:2px dashed #cbd5e1;border-radius:10px;padding:14px;text-align:center;margin:8px 0;background:#f8fafc;cursor:pointer;transition:all .15s}
+  .drop:hover,.drop.over{border-color:#ec4899;background:#fef2f8}
+  .drop.ok{border-color:#16a34a;background:#f0fdf4;color:#15803d;font-weight:700}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px}
+  .kpi{background:#fff;border-radius:12px;padding:14px;text-align:center;border-left:4px solid #ec4899}
+  .kpi .lbl{font-size:9px;font-weight:900;color:#64748b;text-transform:uppercase;letter-spacing:1.5px}
+  .kpi .val{font-size:22px;font-weight:900;color:#0c1f44;margin-top:4px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{background:#0c1f44;color:#facc15;padding:10px 8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:1.5px}
+  td{padding:8px;border-bottom:1px solid #e2e8f0}
+  tr.top{background:#fef3c7}
+  .fuente{display:inline-block;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:900;color:#fff}
+  .fuente.auto{background:#f97316}
+  .fuente.tul{background:#16a34a}
+  .muted{color:#64748b}
+  #status{font-size:12px;color:#64748b;margin-top:8px}
+  #err{color:#dc2626;font-weight:700;margin-top:8px}
+  details{margin-top:8px}
+  summary{cursor:pointer;font-weight:700;padding:6px 0;color:#1e3a8a}
+  .dia-detail{background:#f8fafc;padding:10px;border-radius:8px;margin-top:6px}
+  .dia-detail table{font-size:11px}
+  .dia-detail th{background:#475569;font-size:9px}
+  .tabs{display:flex;gap:6px;margin-bottom:12px}
+  .tabs button{background:#e2e8f0;color:#334155;padding:8px 16px;font-size:11px;box-shadow:none}
+  .tabs button.active{background:#0c1f44;color:#facc15}
+  .modo{display:none}
+  .modo.show{display:block}
+  .pasos{background:#eff6ff;border-left:4px solid #3b82f6;padding:12px;border-radius:8px;font-size:12px;line-height:1.6;margin:8px 0}
+  .pasos b{color:#1e3a8a}
+  a{color:#1e3a8a;font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <p>🎯 Grupo Llanterama · reporte dedicado</p>
+  <h1>Ventas diarias · Celene Soto</h1>
+  <p style="color:#94a3b8;text-transform:none;letter-spacing:.5px;font-size:10px;margin-top:6px">
+    Filtra solo filas de Celene (TUL 024 y AR 022), agrupa por día y por cliente. Descarga Excel con 4 hojas.
+  </p>
+</header>
+
+<div class="card">
+  <div class="tabs">
+    <button id="tab-online" class="active" onclick="tab('online')">🌐 Cargar online (si está publicado)</button>
+    <button id="tab-file" onclick="tab('file')">📁 Subir CSV manual</button>
+  </div>
+
+  <div id="modo-online" class="modo show">
+    <button id="btn-cargar">🔄 Cargar desde Google Sheets</button>
+    <p class="muted" style="font-size:11px;margin-top:8px">⚠ Si lo abres con doble clic (file://), el navegador bloquea la carga online con "Failed to fetch". Usa la pestaña "Subir CSV manual" o súbelo a tu GitHub Pages.</p>
+  </div>
+
+  <div id="modo-file" class="modo">
+    <div class="pasos">
+      <b>Pasos:</b><br>
+      1. Abre tu Google Sheet con las dos hojas.<br>
+      2. En la pestaña <b>campallante</b>: <i>Archivo → Descargar → Valores separados por comas (.csv)</i> → suéltalo abajo en "campallante".<br>
+      3. Repite con la pestaña <b>campaauto</b> → suéltalo en "campaauto".<br>
+      4. El reporte se arma solo.
+    </div>
+    <label class="drop" id="drop-tul" onclick="document.getElementById('f-tul').click()">
+      <input type="file" id="f-tul" accept=".csv,text/csv" style="display:none">
+      📄 Arrastra aquí <b>campallante.csv</b> (TUL · Tulancingo, buscará cod vend 024)
+    </label>
+    <label class="drop" id="drop-auto" onclick="document.getElementById('f-auto').click()">
+      <input type="file" id="f-auto" accept=".csv,text/csv" style="display:none">
+      📄 Arrastra aquí <b>campaauto.csv</b> (AR · Autoeléctrica Roma, buscará cod vend 022)
+    </label>
+  </div>
+
+  <button id="btn-excel" class="sec" style="margin-top:10px" disabled>⬇ Descargar Excel</button>
+  <div id="status"></div>
+  <div id="err"></div>
+</div>
+
+<div id="resumen"></div>
+<div id="tabla"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const CSV = {
+  TUL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSXDFzkon4Xxv9ydIrVdSW5ER9FweUPFbmE0GI55ca6rFzy-yrjFVmN8kgQ7X0s5oF6k1Wbf8XG4lmX/pub?gid=1860476982&single=true&output=csv',
+  AUTO:'https://docs.google.com/spreadsheets/d/e/2PACX-1vSXDFzkon4Xxv9ydIrVdSW5ER9FweUPFbmE0GI55ca6rFzy-yrjFVmN8kgQ7X0s5oF6k1Wbf8XG4lmX/pub?gid=1762177058&single=true&output=csv'
+};
+const MESES = {'ene':1,'enero':1,'feb':2,'febrero':2,'mar':3,'marzo':3,'abr':4,'abril':4,'may':5,'mayo':5,
+  'jun':6,'junio':6,'jul':7,'julio':7,'ago':8,'agosto':8,'sep':9,'sept':9,'septiembre':9,
+  'oct':10,'octubre':10,'nov':11,'noviembre':11,'dic':12,'diciembre':12};
+const MES_NOM = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+const n = v => { const x=parseFloat(String(v||'').replace(/[^0-9.-]/g,'')); return isNaN(x)?0:x; };
+const fmtM = v => '$' + Math.round(v).toLocaleString('es-MX');
+const parseFecha = raw => {
+  if(!raw) return null;
+  const s = String(raw).trim().toLowerCase();
+  const m = s.match(/^(\d{1,2})[\/-]([a-z]{3,})[\/-](\d{2,4})$/);
+  if(m){ const mes=MESES[m[2]]; if(!mes) return null; let a=+m[3]; if(a<100)a+=2000; return {dia:+m[1],mes,anio:a}; }
+  const m2 = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+  if(m2){ let a=+m2[3]; if(a<100)a+=2000; return {dia:+m2[1],mes:+m2[2],anio:a}; }
+  const m3 = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m3) return {dia:+m3[3],mes:+m3[2],anio:+m3[1]};
+  const d = new Date(raw); if(!isNaN(d)) return {dia:d.getDate(),mes:d.getMonth()+1,anio:d.getFullYear()};
+  return null;
+};
+const fetchCsv = async url => { const r = await fetch(url); if(!r.ok) throw new Error(r.status); return r.text(); };
+const parseCsv = txt => Papa.parse(txt,{header:true,skipEmptyLines:true}).data;
+const readFile = f => new Promise((ok,err)=>{ const r=new FileReader(); r.onload=()=>ok(r.result); r.onerror=err; r.readAsText(f); });
+
+let DATA = null;
+let FILES = { tul:null, auto:null };
+
+function tab(m){
+  document.getElementById('tab-online').classList.toggle('active', m==='online');
+  document.getElementById('tab-file').classList.toggle('active', m==='file');
+  document.getElementById('modo-online').classList.toggle('show', m==='online');
+  document.getElementById('modo-file').classList.toggle('show', m==='file');
+}
+
+async function cargarOnline(){
+  const btn = document.getElementById('btn-cargar');
+  const st = document.getElementById('status');
+  const er = document.getElementById('err');
+  er.textContent = '';
+  btn.disabled = true; btn.textContent = '⏳ Cargando...';
+  st.textContent = 'Descargando campallante y campaauto...';
+  try{
+    const [tulTxt, autoTxt] = await Promise.all([fetchCsv(CSV.TUL), fetchCsv(CSV.AUTO)]);
+    FILES.tul = parseCsv(tulTxt);
+    FILES.auto = parseCsv(autoTxt);
+    procesarYrender();
+  }catch(e){
+    er.innerHTML = '❌ ' + e.message + '. Usa la pestaña <b>📁 Subir CSV manual</b> en su lugar.';
+  }finally{
+    btn.disabled = false; btn.textContent = '🔄 Recargar desde Google Sheets';
+  }
+}
+
+function setupDrop(id, inputId, slot){
+  const el = document.getElementById(id);
+  const inp = document.getElementById(inputId);
+  const handle = async (f)=>{
+    if(!f) return;
+    const txt = await readFile(f);
+    FILES[slot] = parseCsv(txt);
+    el.classList.add('ok');
+    el.innerHTML = `✓ <b>${f.name}</b> cargado · ${FILES[slot].length} filas`;
+    if(FILES.tul && FILES.auto) procesarYrender();
+  };
+  el.ondragover = e => { e.preventDefault(); el.classList.add('over'); };
+  el.ondragleave = () => el.classList.remove('over');
+  el.ondrop = e => { e.preventDefault(); el.classList.remove('over'); handle(e.dataTransfer.files[0]); };
+  inp.onchange = e => handle(e.target.files[0]);
+}
+
+function procesarYrender(){
+  const er = document.getElementById('err');
+  const st = document.getElementById('status');
+  er.textContent = '';
+  try{
+    DATA = procesar(FILES.tul||[], FILES.auto||[]);
+    render();
+    document.getElementById('btn-excel').disabled = false;
+    st.textContent = `✓ ${DATA.filas.length} filas de Celene (${DATA.dias.length} días distintos, ${DATA.clientes.length} clientes).`;
+  }catch(e){ er.textContent = '❌ ' + e.message; }
+}
+
+function procesar(tul, auto){
+  const filas = [];
+  tul.forEach(r=>{
+    const c = String(r['Cod Vend 1']||r['COD VEND 1']||'').replace(/\D/g,'').padStart(3,'0');
+    if(c === '024') filas.push({...r, _fuente:'TUL'});
+  });
+  auto.forEach(r=>{
+    const c = String(r['Cod Vend 1']||r['COD VEND 1']||'').replace(/\D/g,'').padStart(3,'0');
+    if(c === '022') filas.push({...r, _fuente:'AUTO'});
+  });
+  const porDia = {};
+  const clientesSet = {};
+  filas.forEach(r=>{
+    const f = parseFecha(r['Fecha']||r['FECHA']||r['fecha']);
+    if(!f) return;
+    const key = `${f.anio}-${String(f.mes).padStart(2,'0')}-${String(f.dia).padStart(2,'0')}`;
+    if(!porDia[key]) porDia[key] = {anio:f.anio,mes:f.mes,dia:f.dia,importe:0,costo:0,facturas:new Set(),clientes:{},renglones:0,fuente:new Set()};
+    const d = porDia[key];
+    d.importe += n(r['Importe']||r['IMPORTE']);
+    d.costo   += n(r['Costo']||r['COSTO']);
+    d.renglones++;
+    d.fuente.add(r._fuente);
+    const fac = String(r['Factura']||r['FACTURA']||'').trim();
+    if(fac) d.facturas.add(fac);
+    const cod = String(r['Cod de cliente']||r['COD DE CLIENTE']||'').trim();
+    const nom = String(r['Cliente']||r['CLIENTE']||'').trim();
+    if(cod||nom){
+      const k = cod||nom;
+      if(!d.clientes[k]) d.clientes[k] = {cod,nom,importe:0,facturas:new Set()};
+      d.clientes[k].importe += n(r['Importe']||r['IMPORTE']);
+      if(fac) d.clientes[k].facturas.add(fac);
+      if(!clientesSet[k]) clientesSet[k] = {cod,nom,importe:0,dias:new Set()};
+      clientesSet[k].importe += n(r['Importe']||r['IMPORTE']);
+      clientesSet[k].dias.add(key);
+    }
+  });
+  const dias = Object.keys(porDia).sort().map(k=>({key:k,...porDia[k]}));
+  const clientes = Object.values(clientesSet).sort((a,b)=>b.importe-a.importe);
+  return {filas, dias, clientes};
+}
+
+function render(){
+  if(!DATA) return;
+  const totalImporte = DATA.dias.reduce((s,d)=>s+d.importe,0);
+  const totalCosto = DATA.dias.reduce((s,d)=>s+d.costo,0);
+  const totalFact = DATA.dias.reduce((s,d)=>s+d.facturas.size,0);
+  const diaTop = DATA.dias.slice().sort((a,b)=>b.importe-a.importe)[0];
+  document.getElementById('resumen').innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><div class="lbl">Facturado total</div><div class="val">${fmtM(totalImporte)}</div></div>
+      <div class="kpi"><div class="lbl">Utilidad</div><div class="val" style="color:#16a34a">${fmtM(totalImporte-totalCosto)}</div></div>
+      <div class="kpi"><div class="lbl">Días con venta</div><div class="val">${DATA.dias.length}</div></div>
+      <div class="kpi"><div class="lbl">Facturas</div><div class="val">${totalFact}</div></div>
+      <div class="kpi"><div class="lbl">Clientes únicos</div><div class="val">${DATA.clientes.length}</div></div>
+      ${diaTop ? `<div class="kpi" style="border-left-color:#eab308"><div class="lbl">Mejor día</div><div class="val" style="font-size:14px">${diaTop.dia}-${MES_NOM[diaTop.mes]}-${String(diaTop.anio).slice(2)}<br><span style="font-size:18px;color:#16a34a">${fmtM(diaTop.importe)}</span></div></div>`:''}
+    </div>`;
+
+  const diasDesc = DATA.dias.slice().sort((a,b)=>a.key.localeCompare(b.key));
+  const topImp = Math.max(...DATA.dias.map(d=>d.importe));
+  let rows = '';
+  diasDesc.forEach(d=>{
+    const util = d.importe - d.costo;
+    const isTop = d.importe === topImp;
+    const fuentes = [...d.fuente].map(f=>`<span class="fuente ${f==='TUL'?'tul':'auto'}">${f==='TUL'?'TUL 024':'AR 022'}</span>`).join(' ');
+    const clientes = Object.values(d.clientes).sort((a,b)=>b.importe-a.importe);
+    let clienteRows = '';
+    clientes.forEach(c=>{
+      clienteRows += `<tr><td>${c.cod||'—'}</td><td>${c.nom||'—'}</td><td>${c.facturas.size}</td><td style="text-align:right">${fmtM(c.importe)}</td></tr>`;
+    });
+    rows += `
+      <tr class="${isTop?'top':''}">
+        <td><b>${d.dia}-${MES_NOM[d.mes]}-${String(d.anio).slice(2)}</b> ${fuentes}</td>
+        <td style="text-align:right"><b>${fmtM(d.importe)}</b></td>
+        <td style="text-align:right;color:#16a34a">${fmtM(util)}</td>
+        <td style="text-align:center">${d.facturas.size}</td>
+        <td style="text-align:center">${Object.keys(d.clientes).length}</td>
+        <td><details><summary>Ver ${clientes.length}</summary>
+          <div class="dia-detail"><table>
+            <thead><tr><th>Cod</th><th>Cliente</th><th>Fact</th><th style="text-align:right">Importe</th></tr></thead>
+            <tbody>${clienteRows}</tbody>
+          </table></div>
+        </details></td>
+      </tr>`;
+  });
+  document.getElementById('tabla').innerHTML = `
+    <div class="card">
+      <h2 style="font-size:16px;margin-bottom:10px">📅 Ventas por día</h2>
+      <table>
+        <thead><tr><th>Día</th><th style="text-align:right">Facturado</th><th style="text-align:right">Utilidad</th><th style="text-align:center">Fact</th><th style="text-align:center">Clientes</th><th>Detalle</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:16px;margin-bottom:10px">👥 Top clientes de Celene (todo el periodo)</h2>
+      <table>
+        <thead><tr><th>#</th><th>Cod</th><th>Cliente</th><th style="text-align:center">Días</th><th style="text-align:right">Facturado</th></tr></thead>
+        <tbody>
+          ${DATA.clientes.slice(0,30).map((c,i)=>`
+            <tr><td>${i+1}</td><td>${c.cod||'—'}</td><td>${c.nom||'—'}</td><td style="text-align:center">${c.dias.size}</td><td style="text-align:right"><b>${fmtM(c.importe)}</b></td></tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <p class="muted" style="font-size:10px;margin-top:8px">Mostrando ${Math.min(30,DATA.clientes.length)} de ${DATA.clientes.length}. Descarga el Excel para ver todos.</p>
+    </div>`;
+}
+
+function excel(){
+  if(!DATA) return;
+  const wb = XLSX.utils.book_new();
+  const h1 = [['Fecha','Año','Mes','Día','Fuente','Facturas','Clientes','Importe','Costo','Utilidad','Renglones']];
+  DATA.dias.slice().sort((a,b)=>a.key.localeCompare(b.key)).forEach(d=>{
+    h1.push([d.key, d.anio, d.mes, d.dia, [...d.fuente].join('+'), d.facturas.size, Object.keys(d.clientes).length, d.importe, d.costo, d.importe-d.costo, d.renglones]);
+  });
+  const ws1 = XLSX.utils.aoa_to_sheet(h1);
+  ws1['!cols']=[{wch:12},{wch:6},{wch:5},{wch:5},{wch:10},{wch:9},{wch:9},{wch:14},{wch:14},{wch:14},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Resumen diario');
+  const h2 = [['Fecha','Cod cliente','Cliente','Facturas','Importe']];
+  DATA.dias.slice().sort((a,b)=>a.key.localeCompare(b.key)).forEach(d=>{
+    Object.values(d.clientes).sort((a,b)=>b.importe-a.importe).forEach(c=>{
+      h2.push([d.key, c.cod, c.nom, c.facturas.size, c.importe]);
+    });
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(h2);
+  ws2['!cols']=[{wch:12},{wch:12},{wch:36},{wch:9},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Clientes por día');
+  const h3 = [['#','Cod cliente','Cliente','Días con venta','Importe total']];
+  DATA.clientes.forEach((c,i)=>h3.push([i+1,c.cod,c.nom,c.dias.size,c.importe]));
+  const ws3 = XLSX.utils.aoa_to_sheet(h3);
+  ws3['!cols']=[{wch:5},{wch:12},{wch:36},{wch:12},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws3, 'Top clientes');
+  const headers = ['Codigo','Descripcion','Cod Vend 1','Cantidad','Importe','Costo','Cliente','Cod de cliente','Clasificacion','Almacen','Factura','Cod Vend 2','Descuento','Equi','Fecha','1','2','3','4','5','DCTOAPOYO','MONTOAPOYO','_fuente'];
+  const h4 = [headers];
+  DATA.filas.forEach(r=>{ h4.push(headers.map(k=>r[k] ?? r[k.toLowerCase()] ?? '')); });
+  const ws4 = XLSX.utils.aoa_to_sheet(h4);
+  XLSX.utils.book_append_sheet(wb, ws4, 'Filas crudas');
+  const fecha = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Celene_Soto_ventas_diarias_${fecha}.xlsx`);
+}
+
+document.getElementById('btn-cargar').onclick = cargarOnline;
+document.getElementById('btn-excel').onclick = excel;
+setupDrop('drop-tul', 'f-tul', 'tul');
+setupDrop('drop-auto', 'f-auto', 'auto');
+</script>
+</body>
+</html>
