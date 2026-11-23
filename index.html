@@ -367,6 +367,53 @@ function renderMesSelector(){
     }).join('') + '</div>';
 }
 
+function diasMes(){
+  if(!MES_SEL || !DATA) return [];
+  return DATA.dias.filter(d => d.anio===MES_SEL.anio && d.mes===MES_SEL.mes);
+}
+// Reconstruye clientes consolidados (y sus categorías) a partir de un conjunto de días
+function clientesDesdeDias(dias){
+  const map = {};
+  dias.forEach(d=>{
+    for(const nk in d.clientes){
+      const dc = d.clientes[nk];
+      if(!map[nk]){
+        const g = DATA.clientes.find(x => normNom(x.nomCanon)===nk) || {codes:[], cat:false, zona:dc.zona};
+        map[nk] = {nomCanon:dc.nomCanon, codes:new Set([...(dc.codes||[])]), zona:dc.zona, importe:0, costo:0, dias:new Set(), facturas:new Set(), cat:g.cat, porCat:{}};
+      }
+      const m = map[nk];
+      dc.codes.forEach(c=>m.codes.add(c));
+      m.importe += dc.importe;
+      m.dias.add(d.key);
+      (dc.facturas||new Set()).forEach(f=>m.facturas.add(f));
+    }
+  });
+  // rellenar porCat/costo del cliente global proporcionalmente no es exacto; mejor recalcular con _filasDeMes
+  // Para porCat del mes, lo haremos aparte al necesitarlo
+  return Object.values(map).map(c=>({...c, codes:[...c.codes]})).sort((a,b)=>b.importe-a.importe);
+}
+// Recalcula porCat por cliente en el mes seleccionado, releyendo filas crudas filtradas
+function porCatMes(){
+  const res = {}; // nk => {acum:{importe,cantidad}, lub:{}, ...}
+  if(!MES_SEL || !DATA) return res;
+  DATA.filas.forEach(r=>{
+    const f = parseFecha(r['Fecha']||r['FECHA']||r['fecha']);
+    if(!f || f.anio!==MES_SEL.anio || f.mes!==MES_SEL.mes) return;
+    const cod = String(r['Cod de cliente']||r['COD DE CLIENTE']||'').trim();
+    const nom = String(r['Cliente']||r['CLIENTE']||'').trim();
+    if(!nom && !cod) return;
+    const nk = normNom(nom) || cod;
+    const clasif = String(r['Clasificacion']||r['CLASIFICACION']||'').toUpperCase().trim();
+    let catKey = null;
+    for(const c of CATEGORIAS){ if(c.match(clasif)){ catKey = c.key; break; } }
+    if(!catKey) return;
+    if(!res[nk]) res[nk] = {};
+    if(!res[nk][catKey]) res[nk][catKey] = {importe:0, cantidad:0};
+    res[nk][catKey].importe += n(r['Importe']||r['IMPORTE']);
+    res[nk][catKey].cantidad += n(r['Cantidad']||r['CANTIDAD']);
+  });
+  return res;
+}
 function setMes(a,m){ MES_SEL = {anio:a, mes:m}; DIA_SEL = null; render(); }
 
 function renderCalendario(){
@@ -547,6 +594,17 @@ function renderZonas(){
   const arr = Object.entries(porZona).map(([z,v])=>({zona:z, importe:v.importe, clientes:v.clientes.size})).sort((a,b)=>b.importe-a.importe);
   const total = arr.reduce((s,r)=>s+r.importe,0);
   if(total === 0){ cont.innerHTML=''; return; }
+  // Construir map de clientes por zona (para expandir)
+  const cliPorZona = {};
+  diasBase.forEach(d=>{
+    for(const nk in d.clientes){
+      const c = d.clientes[nk];
+      if(!cliPorZona[c.zona]) cliPorZona[c.zona] = {};
+      if(!cliPorZona[c.zona][nk]) cliPorZona[c.zona][nk] = {nom:c.nomCanon, codes:new Set([...(c.codes||[])]), importe:0, cat:c.cat};
+      cliPorZona[c.zona][nk].importe += c.importe;
+      c.codes.forEach(x=>cliPorZona[c.zona][nk].codes.add(x));
+    }
+  });
   cont.innerHTML = `
     <div class="card">
       <h2 style="font-size:14px;margin-bottom:10px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;color:#0c1f44">
@@ -555,24 +613,39 @@ function renderZonas(){
       ${arr.map(r=>{
         const pct = total>0 ? (r.importe/total*100) : 0;
         const color = ZONA_COLORS[r.zona] || '#64748b';
+        const clis = Object.values(cliPorZona[r.zona]||{}).sort((a,b)=>b.importe-a.importe);
+        const clisHtml = clis.map(c=>`
+          <tr>
+            <td style="padding:5px 8px;font-size:11px"><b>${c.nom}</b> ${!c.cat?'<span class="pill gray">s/cat</span>':''}</td>
+            <td style="padding:5px 8px;text-align:center"><span class="chip-lta">${[...c.codes].join('</span> <span class="chip-lta">')||'—'}</span></td>
+            <td style="padding:5px 8px;text-align:right;white-space:nowrap"><b style="color:${color}">${fmtM(c.importe)}</b></td>
+          </tr>`).join('');
         return `
-        <div class="zonabar" style="border-left-color:${color}">
-          <div><h4 style="color:${color}">${r.zona}</h4><div class="pct">${r.clientes} cliente${r.clientes===1?'':'s'} con compra</div></div>
-          <div class="big">${fmtM(r.importe)}</div>
-          <div class="pct">${pct.toFixed(1)}%</div>
-          <div class="bar"><div class="fill" style="width:${pct.toFixed(1)}%;background:${color}"></div></div>
-        </div>`;
+        <details class="zonabar" style="border-left-color:${color};display:block;padding:0;overflow:hidden">
+          <summary style="list-style:none;cursor:pointer;padding:10px 14px;display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center">
+            <div><h4 style="color:${color}">${r.zona} <span style="font-size:9px;color:#64748b;font-weight:400">▼ clic para ver clientes</span></h4><div class="pct">${r.clientes} cliente${r.clientes===1?'':'s'} con compra</div></div>
+            <div class="big">${fmtM(r.importe)}</div>
+            <div class="pct">${pct.toFixed(1)}%</div>
+            <div class="bar" style="grid-column:1/-1;margin-top:6px"><div class="fill" style="width:${pct.toFixed(1)}%;background:${color}"></div></div>
+          </summary>
+          <div style="padding:8px 14px 12px;background:#f8fafc;border-top:1px solid #e2e8f0">
+            <table><thead><tr><th style="padding:5px 8px">Cliente</th><th style="padding:5px 8px;text-align:center">Códigos</th><th style="padding:5px 8px;text-align:right">Importe</th></tr></thead><tbody>${clisHtml}</tbody></table>
+          </div>
+        </details>`;
       }).join('')}
+      <p class="muted" style="font-size:10px;margin-top:8px">Clic en cada zona para ver sus clientes. "(SIN ZONA)" o <span class="pill gray">s/cat</span> = clientes que aún no están en tu catálogo.</p>
     </div>`;
 }
 
 function renderTopClientes(){
   const cont = document.getElementById('clientes-top');
-  const top = DATA.clientes.slice(0,20);
+  const lista = clientesDesdeDias(diasMes());
+  const top = lista.slice(0,20);
+  const scopeLbl = MES_SEL ? `${MES_NOM[MES_SEL.mes]} ${MES_SEL.anio}` : 'todo el periodo';
   cont.innerHTML = `
     <div class="card">
       <h2 style="font-size:14px;margin-bottom:10px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;color:#0c1f44">
-        👥 Mejores clientes <span class="muted" style="font-weight:400;text-transform:none;font-size:11px">· consolidados por nombre · todo el periodo</span>
+        👥 Mejores clientes <span class="muted" style="font-weight:400;text-transform:none;font-size:11px">· consolidados por nombre · ${scopeLbl}</span>
       </h2>
       <table>
         <thead><tr><th>#</th><th>Cliente</th><th style="text-align:center">Zona</th><th style="text-align:center">Códigos</th><th style="text-align:center">Días</th><th style="text-align:center">Fact</th><th style="text-align:right">Importe</th></tr></thead>
@@ -584,17 +657,17 @@ function renderTopClientes(){
           }).join('')}
         </tbody>
       </table>
-      <p class="muted" style="font-size:10px;margin-top:8px">Top 20 de ${DATA.clientes.length} · descarga el Excel para ver todos.</p>
+      <p class="muted" style="font-size:10px;margin-top:8px">Top 20 de ${lista.length} clientes del mes · descarga el Excel para ver todos.</p>
     </div>`;
 }
 
 function renderCumplimiento(){
   const cont = document.getElementById('cumplimiento');
-  // Para cada cliente del catálogo con día de visita definido, ver si Celene le facturó en ese día (por semana)
-  // Por simplicidad: recorrer todos los días con venta, y por cliente, ver si cumplió su día.
-  const stats = {}; // nk => {cat, dias_esperados:Set de keys, dias_facturados:Set, dias_otro:Set}
-  // Construir lista de fechas por cliente
-  DATA.clientes.forEach(c=>{
+  const dias = diasMes();
+  const clientesMes = clientesDesdeDias(dias);
+  const scopeLbl = MES_SEL ? `${MES_NOM[MES_SEL.mes]} ${MES_SEL.anio}` : 'todo el periodo';
+  const stats = {};
+  clientesMes.forEach(c=>{
     const nk = normNom(c.nomCanon);
     const cat = CAT_IDX[nk];
     if(!cat) return;
@@ -615,7 +688,7 @@ function renderCumplimiento(){
   cont.innerHTML = `
     <div class="card">
       <h2 style="font-size:14px;margin-bottom:10px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;color:#0c1f44">
-        📅 Cumplimiento de día de visita <span class="muted" style="font-weight:400;text-transform:none;font-size:11px">· todo el periodo</span>
+        📅 Cumplimiento de día de visita <span class="muted" style="font-weight:400;text-transform:none;font-size:11px">· ${scopeLbl}</span>
       </h2>
       <table>
         <thead><tr><th>Cliente</th><th style="text-align:center">Zona</th><th style="text-align:center">Día asignado</th><th style="text-align:center">Visitas día ok</th><th style="text-align:center">Fuera de día</th><th style="text-align:right">Importe</th></tr></thead>
@@ -634,16 +707,21 @@ function renderCumplimiento(){
 
 function renderProductos(){
   const cont = document.getElementById('productos');
-  // Totales por categoría + top clientes por categoría
-  const totCat = {}; // key => importe total global
+  const scopeLbl = MES_SEL ? `${MES_NOM[MES_SEL.mes]} ${MES_SEL.anio}` : 'todo el periodo';
+  // Recalcular porCat por cliente, para el mes activo
+  const perCliCat = porCatMes();
+  const clientesMes = clientesDesdeDias(diasMes());
+  const infoCli = {}; clientesMes.forEach(c=>infoCli[normNom(c.nomCanon)] = c);
+  const totCat = {};
   CATEGORIAS.forEach(c=>totCat[c.key]=0);
-  const topPorCat = {}; // key => sorted array of {nom, imp, cant, zona, codes}
+  const topPorCat = {};
   CATEGORIAS.forEach(cat=>{
     const arr = [];
-    DATA.clientes.forEach(c=>{
-      const v = c.porCat && c.porCat[cat.key];
+    Object.entries(perCliCat).forEach(([nk, cats])=>{
+      const v = cats[cat.key];
       if(v && v.importe>0){
-        arr.push({nom:c.nomCanon, zona:c.zona, codes:c.codes, imp:v.importe, cant:v.cantidad});
+        const info = infoCli[nk] || {nomCanon:nk, zona:'(SIN ZONA)', codes:[]};
+        arr.push({nom:info.nomCanon, zona:info.zona, codes:info.codes, imp:v.importe, cant:v.cantidad});
         totCat[cat.key] += v.importe;
       }
     });
@@ -683,7 +761,7 @@ function renderProductos(){
   cont.innerHTML = `
     <div class="card">
       <h2 style="font-size:14px;margin-bottom:12px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;color:#0c1f44">
-        🛒 Productos: mejores clientes por categoría <span class="muted" style="font-weight:400;text-transform:none;font-size:11px">· todo el periodo</span>
+        🛒 Productos: mejores clientes por categoría <span class="muted" style="font-weight:400;text-transform:none;font-size:11px">· ${scopeLbl}</span>
       </h2>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px">
         ${cards}
