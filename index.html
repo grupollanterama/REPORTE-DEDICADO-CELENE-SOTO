@@ -287,7 +287,7 @@ function procesar(tul, auto){
     const f = parseFecha(r['Fecha']||r['FECHA']||r['fecha']);
     if(!f) return;
     const key = `${f.anio}-${String(f.mes).padStart(2,'0')}-${String(f.dia).padStart(2,'0')}`;
-    if(!porDia[key]) porDia[key] = {anio:f.anio,mes:f.mes,dia:f.dia,importe:0,costo:0,facturas:new Set(),clientes:{},renglones:0,fuente:new Set(),porZona:{}};
+    if(!porDia[key]) porDia[key] = {anio:f.anio,mes:f.mes,dia:f.dia,importe:0,costo:0,facturas:new Set(),clientes:{},renglones:0,fuente:new Set(),porZona:{},porZonaCosto:{}};
     const d = porDia[key];
     const imp = n(r['Importe']||r['IMPORTE']);
     const cos = n(r['Costo']||r['COSTO']);
@@ -311,6 +311,7 @@ function procesar(tul, auto){
     dc.importe += imp;
     if(fac) dc.facturas.add(fac);
     d.porZona[zona] = (d.porZona[zona]||0) + imp;
+    d.porZonaCosto[zona] = (d.porZonaCosto[zona]||0) + cos;
     // Clasificar por categoría de producto
     const clasif = String(r['Clasificacion']||r['CLASIFICACION']||'').toUpperCase().trim();
     const cant = n(r['Cantidad']||r['CANTIDAD']);
@@ -596,16 +597,17 @@ function renderZonas(){
   const porZona = {};
   diasBase.forEach(d=>{
     for(const z in d.porZona){
-      if(!porZona[z]) porZona[z]={importe:0,clientes:new Set()};
+      if(!porZona[z]) porZona[z]={importe:0,costo:0,clientes:new Set()};
       porZona[z].importe += d.porZona[z];
+      porZona[z].costo += (d.porZonaCosto && d.porZonaCosto[z]) || 0;
     }
     for(const nk in d.clientes){
       const c = d.clientes[nk];
-      if(!porZona[c.zona]) porZona[c.zona]={importe:0,clientes:new Set()};
+      if(!porZona[c.zona]) porZona[c.zona]={importe:0,costo:0,clientes:new Set()};
       porZona[c.zona].clientes.add(nk);
     }
   });
-  const arr = Object.entries(porZona).map(([z,v])=>({zona:z, importe:v.importe, clientes:v.clientes.size})).sort((a,b)=>b.importe-a.importe);
+  const arr = Object.entries(porZona).map(([z,v])=>({zona:z, importe:v.importe, costo:v.costo, util:v.importe-v.costo, clientes:v.clientes.size})).sort((a,b)=>b.importe-a.importe);
   const total = arr.reduce((s,r)=>s+r.importe,0);
   if(total === 0){ cont.innerHTML=''; return; }
   // Construir map de clientes por zona (para expandir)
@@ -636,10 +638,11 @@ function renderZonas(){
           </tr>`).join('');
         return `
         <details class="zonabar" style="border-left-color:${color};display:block;padding:0;overflow:hidden">
-          <summary style="list-style:none;cursor:pointer;padding:10px 14px;display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center">
+          <summary style="list-style:none;cursor:pointer;padding:10px 14px;display:grid;grid-template-columns:1fr auto auto auto;gap:12px;align-items:center">
             <div><h4 style="color:${color}">${r.zona} <span style="font-size:9px;color:#64748b;font-weight:400">▼ clic para ver clientes</span></h4><div class="pct">${r.clientes} cliente${r.clientes===1?'':'s'} con compra</div></div>
-            <div class="big">${fmtM(r.importe)}</div>
-            <div class="pct">${pct.toFixed(1)}%</div>
+            <div style="text-align:right"><div class="big">${fmtM(r.importe)}</div><div class="pct">Facturado</div></div>
+            <div style="text-align:right"><div class="big" style="color:#16a34a">${fmtM(r.util)}</div><div class="pct">Utilidad ${r.importe>0?Math.round(r.util/r.importe*100):0}%</div></div>
+            <div class="pct">${pct.toFixed(1)}%<br>del mes</div>
             <div class="bar" style="grid-column:1/-1;margin-top:6px"><div class="fill" style="width:${pct.toFixed(1)}%;background:${color}"></div></div>
           </summary>
           <div style="padding:8px 14px 12px;background:#f8fafc;border-top:1px solid #e2e8f0">
@@ -828,11 +831,17 @@ function excel(){
   // Zonas
   const zMap = {};
   DATA.clientes.forEach(c=>{
-    if(!zMap[c.zona]) zMap[c.zona]={importe:0,clientes:0};
-    zMap[c.zona].importe += c.importe; zMap[c.zona].clientes++;
+    if(!zMap[c.zona]) zMap[c.zona]={importe:0,costo:0,clientes:0};
+    zMap[c.zona].importe += c.importe;
+    zMap[c.zona].costo += (c.costo||0);
+    zMap[c.zona].clientes++;
   });
-  const h4 = [['Zona','Clientes','Importe']];
-  Object.entries(zMap).sort((a,b)=>b[1].importe-a[1].importe).forEach(([z,v])=>h4.push([z,v.clientes,v.importe]));
+  const h4 = [['Zona','Clientes','Importe','Costo','Utilidad','% margen']];
+  Object.entries(zMap).sort((a,b)=>b[1].importe-a[1].importe).forEach(([z,v])=>{
+    const util = v.importe - v.costo;
+    const mg = v.importe>0 ? Math.round(util/v.importe*100)+'%' : '—';
+    h4.push([z,v.clientes,v.importe,v.costo,util,mg]);
+  });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(h4), 'Zonas');
 
   // Cumplimiento
