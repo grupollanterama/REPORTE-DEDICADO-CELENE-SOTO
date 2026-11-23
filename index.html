@@ -289,6 +289,8 @@ function procesar(tul, auto){
     const nom = String(r['Cliente']||r['CLIENTE']||'').trim();
     if(!nom && !cod) return;
     const nk = normNom(nom) || cod;
+    // Excluir a la propia vendedora facturándose a sí misma
+    if(nk && nk.includes('CELENE SOTO')) return;
     const cat = CAT_IDX[nk];
     const zona = (cat && cat.zona) || '(SIN ZONA)';
     // Día
@@ -403,6 +405,8 @@ function porCatMes(){
     const nom = String(r['Cliente']||r['CLIENTE']||'').trim();
     if(!nom && !cod) return;
     const nk = normNom(nom) || cod;
+    // Excluir a la propia vendedora facturándose a sí misma
+    if(nk && nk.includes('CELENE SOTO')) return;
     const clasif = String(r['Clasificacion']||r['CLASIFICACION']||'').toUpperCase().trim();
     let catKey = null;
     for(const c of CATEGORIAS){ if(c.match(clasif)){ catKey = c.key; break; } }
@@ -640,7 +644,7 @@ function renderZonas(){
 function renderTopClientes(){
   const cont = document.getElementById('clientes-top');
   const lista = clientesDesdeDias(diasMes());
-  const top = lista.slice(0,20);
+  const top = lista; // todos
   const scopeLbl = MES_SEL ? `${MES_NOM[MES_SEL.mes]} ${MES_SEL.anio}` : 'todo el periodo';
   cont.innerHTML = `
     <div class="card">
@@ -657,7 +661,7 @@ function renderTopClientes(){
           }).join('')}
         </tbody>
       </table>
-      <p class="muted" style="font-size:10px;margin-top:8px">Top 20 de ${lista.length} clientes del mes · descarga el Excel para ver todos.</p>
+      <p class="muted" style="font-size:10px;margin-top:8px">${lista.length} cliente${lista.length===1?'':'s'} con compra en el mes.</p>
     </div>`;
 }
 
@@ -693,7 +697,7 @@ function renderCumplimiento(){
       <table>
         <thead><tr><th>Cliente</th><th style="text-align:center">Zona</th><th style="text-align:center">Día asignado</th><th style="text-align:center">Visitas día ok</th><th style="text-align:center">Fuera de día</th><th style="text-align:right">Importe</th></tr></thead>
         <tbody>
-          ${arr.slice(0,30).map(r=>{
+          ${arr.map(r=>{
             const diasLbl = r.esporadico && !r.diasAsig.length ? 'ESPORÁDICO' : (r.diasAsig.join(', ') || '—');
             const okPct = r.totalVisitas>0 ? Math.round(r.cumple/r.totalVisitas*100) : 0;
             const pillCls = okPct>=70?'ok':okPct>=40?'mid':'bad';
@@ -701,7 +705,7 @@ function renderCumplimiento(){
           }).join('')}
         </tbody>
       </table>
-      <p class="muted" style="font-size:10px;margin-top:8px">Top 30 de ${arr.length} clientes del catálogo · "Visitas día ok" = facturas emitidas en el día de visita asignado al cliente.</p>
+      <p class="muted" style="font-size:10px;margin-top:8px">${arr.length} cliente${arr.length===1?'':'s'} del catálogo con compra en el mes · "Visitas día ok" = facturas emitidas en el día de visita asignado al cliente.</p>
     </div>`;
 }
 
