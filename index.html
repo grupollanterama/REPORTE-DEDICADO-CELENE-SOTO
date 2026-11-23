@@ -692,7 +692,7 @@ function renderCumplimiento(){
   const stats = {};
   clientesMes.forEach(c=>{
     const nk = normNom(c.nomCanon);
-    const cat = findCat(nom) || CAT_IDX[nk];
+    const cat = findCat(c.nomCanon) || CAT_IDX[nk];
     if(!cat) return;
     const diasAsig = Object.keys(cat.dias).filter(k=>cat.dias[k] && k!=='ESPORADICO');
     const esporadico = cat.dias['ESPORADICO'];
